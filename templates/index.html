@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RouteCheck — Conformidade de Rotas</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────── -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+    </div>
+    <span class="logo-name">Route<span>Check</span></span>
+    <span class="logo-ver">v1.0</span>
+  </div>
+  <button class="btn-reset hidden" id="btnReset">
+    <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.85"/></svg>
+    Nova análise
+  </button>
+</header>
+
+<!-- ── Upload View ──────────────────────────────────────── -->
+<div id="uploadView" class="upload-view">
+  <div class="upload-inner">
+
+    <!-- Hero -->
+    <div class="hero fade">
+      <div class="hero-pill">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        Análise de Conformidade de Rotas
+      </div>
+      <h1>Sua rota foi<br><span class="grad">realmente seguida?</span></h1>
+      <p>Importe o KMZ do TMS e cole os dados percorridos. A análise cruza as rotas e aponta desvios de sequência em segundos.</p>
+    </div>
+
+    <!-- Inputs -->
+    <div class="input-grid fade-1">
+
+      <!-- Drop KMZ -->
+      <div>
+        <label class="input-label">01 — Rota prevista (KMZ/KML)</label>
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-icon">
+            <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          </div>
+          <div class="drop-title">Arraste ou clique</div>
+          <div class="drop-sub">Arquivo .kmz ou .kml exportado do TMS</div>
+        </div>
+        <input type="file" id="fileInput" accept=".kmz,.kml" style="display:none" />
+      </div>
+
+      <!-- Textarea percorrida -->
+      <div>
+        <label class="input-label">02 — Rota percorrida (colar dados)</label>
+        <textarea
+          id="actualInput"
+          class="actual-textarea"
+          placeholder="Cole aqui os dados da rota percorrida:
+
+1. AD316915194BR
+CEP: 19033760 | Endereço: 747
+Status: Entregue
+Coordenadas: (-22.09368, -51.38521)
+Horário: 11:34
+..."></textarea>
+      </div>
+    </div>
+
+    <!-- Erro -->
+    <div id="errorBar" class="error-bar hidden">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      <span class="error-text"></span>
+    </div>
+
+    <!-- Botão -->
+    <div class="cta-wrap fade-2">
+      <button class="btn-analyze" id="btnAnalyze" disabled>
+        Analisar conformidade
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+
+    <p class="upload-hint fade-3">Os arquivos são processados localmente e não são armazenados.</p>
+  </div>
+</div>
+
+<!-- ── Result View ──────────────────────────────────────── -->
+<div id="resultView" class="result-view hidden">
+
+  <!-- Banner -->
+  <div id="alertBanner" class="alert-banner"></div>
+
+  <!-- Métricas -->
+  <div id="metricsGrid" class="metrics"></div>
+
+  <!-- Tabs -->
+  <div class="tabs fade-2">
+    <button class="tab-btn active" data-tab="table">Tabela</button>
+    <button class="tab-btn" data-tab="map">Mapa</button>
+  </div>
+
+  <!-- Tab: Tabela -->
+  <div id="tabTable" class="fade-3">
+    <div class="filters">
+      <span class="filter-icon">
+        <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      </span>
+      <div id="filterPills"></div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th data-col="plan_seq">Seq. TMS<span class="sort-icon"> ↑</span></th>
+              <th data-col="real_seq">Seq. real<span class="sort-icon"></span></th>
+              <th data-col="code">Objeto<span class="sort-icon"></span></th>
+              <th data-col="time">Horário<span class="sort-icon"></span></th>
+              <th data-col="cep">CEP<span class="sort-icon"></span></th>
+              <th data-col="diff">Desvio<span class="sort-icon"></span></th>
+              <th data-col="conformidade">Conformidade<span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer" id="tableCount"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Mapa -->
+  <div id="tabMap" class="hidden">
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#4f8ef7;opacity:.5;border-top:2px dashed #4f8ef7"></div> Rota prevista (TMS)</div>
+      <div class="legend-item"><div class="legend-line" style="background:#22c98a"></div> Rota percorrida</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c98a"></div> Em ordem</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f05252"></div> Fora de ordem</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f5a623"></div> Não entregue</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4f8ef7"></div> Não encontrado</div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<!-- App JS -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
