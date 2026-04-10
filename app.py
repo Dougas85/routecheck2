@@ -102,6 +102,7 @@ def parse_actual(text):
 
 # ─── Análise ──────────────────────────────────────────────────────────────────
 def analyze(planned, actual):
+    # Mapa código → objeto percorrido (deduplicado)
     actual_map = {}
     seen = set()
     for a in actual:
@@ -109,13 +110,55 @@ def analyze(planned, actual):
             seen.add(a['code'])
             actual_map[a['code']] = a
 
-    results       = []
-    in_order      = 0
-    out_order     = 0
-    not_found     = 0
-    not_delivered = 0
-    total_dist    = 0.0
-    desvios       = []
+    # ── Construir grupos do TMS ────────────────────────────────────────────────
+    # O TMS agrupa objetos no mesmo local com a mesma seq e mesmas coordenadas.
+    # Exemplo: A(seq=3,lat=X), B(seq=3,lat=X), C(seq=3,lat=X) → grupo 3
+    # Criamos um mapeamento: code → grupo_id  (número de ordem do grupo único)
+    # e grupo_id → seq_range (min_seq, max_seq do grupo)
+    #
+    # Dois objetos são do mesmo grupo se tiverem a mesma seq OU coordenadas
+    # idênticas (caso raro de mesma lat/lon com seq diferente).
+
+    groups = []       # lista de sets de códigos por grupo
+    code_to_group = {}
+
+    for p in planned:
+        # Tenta encontrar grupo existente com mesma seq E mesmas coordenadas
+        matched_group = None
+        for i, g in enumerate(groups):
+            rep = next(pp for pp in planned if pp['code'] in g)
+            if rep['seq'] == p['seq'] and abs(rep['lat'] - p['lat']) < 1e-6 and abs(rep['lon'] - p['lon']) < 1e-6:
+                matched_group = i
+                break
+        if matched_group is not None:
+            groups[matched_group].add(p['code'])
+        else:
+            groups.append({p['code']})
+        code_to_group[p['code']] = matched_group if matched_group is not None else len(groups) - 1
+
+    # Para cada grupo, qual é a faixa de sequências reais esperadas na percorrida?
+    # Como a percorrida não agrupa, cada grupo de N objetos ocupa N posições
+    # consecutivas na percorrida. Calculamos o offset acumulado.
+    group_expected_range = {}  # grupo_id → (real_seq_min, real_seq_max)
+    offset = 0
+    visited_groups = []
+    for p in planned:
+        gid = code_to_group[p['code']]
+        if gid not in group_expected_range:
+            group_size   = len(groups[gid])
+            real_seq_min = p['seq'] + offset
+            real_seq_max = p['seq'] + offset + group_size - 1
+            group_expected_range[gid] = (real_seq_min, real_seq_max)
+            visited_groups.append(gid)
+            offset += group_size - 1  # grupos maiores que 1 empurram as posições seguintes
+
+    # ── Avaliar cada objeto ────────────────────────────────────────────────────
+    results   = []
+    in_order  = 0
+    out_order = 0
+    not_found = 0
+    total_dist = 0.0
+    desvios   = []
 
     for p in planned:
         a = actual_map.get(p['code'])
@@ -126,35 +169,48 @@ def analyze(planned, actual):
                 'code': p['code'], 'time': None,
                 'status': None, 'cep': None, 'addr': None,
                 'conformidade': 'nao_encontrado', 'diff': 0,
+                'grupo_size': len(groups[code_to_group[p['code']]]),
                 'plan_lat': p['lat'], 'plan_lon': p['lon'],
                 'real_lat': None, 'real_lon': None,
             })
             continue
 
-        delivered = 'não' not in a['status'].lower()
-        diff      = a['seq'] - p['seq']
+        gid = code_to_group[p['code']]
+        rmin, rmax = group_expected_range[gid]
+        real_seq   = a['seq']
+        # Em ordem se a seq real cai dentro da janela esperada para o grupo
+        # Tolerância de +/- 1 para absorver pequenas imprecisões
+        em_ordem = (rmin - 1) <= real_seq <= (rmax + 1)
 
-        if not delivered:
-            not_delivered += 1
-            conf = 'nao_entregue'
-        elif abs(diff) <= 1:
+        if em_ordem:
             in_order += 1
             conf = 'em_ordem'
+            diff = 0
         else:
             out_order += 1
             conf = 'fora_de_ordem'
+            # diff em relação ao centro do grupo esperado
+            centro = (rmin + rmax) / 2
+            diff   = round(real_seq - centro)
             desvios.append(abs(diff))
 
         if a['dist_m']:
             total_dist += a['dist_m']
 
         results.append({
-            'plan_seq': p['seq'], 'real_seq': a['seq'],
-            'code': p['code'], 'time': a['time'],
-            'status': a['status'], 'cep': a['cep'], 'addr': a['addr'],
-            'conformidade': conf, 'diff': diff,
-            'plan_lat': p['lat'], 'plan_lon': p['lon'],
-            'real_lat': a['lat'], 'real_lon': a['lon'],
+            'plan_seq':   p['seq'],
+            'real_seq':   real_seq,
+            'code':       p['code'],
+            'time':       a['time'],
+            'status':     a['status'],
+            'cep':        a['cep'],
+            'addr':       a['addr'],
+            'conformidade': conf,
+            'diff':       diff,
+            'grupo_size': len(groups[gid]),
+            'expected_range': f"{rmin}–{rmax}" if rmin != rmax else str(rmin),
+            'plan_lat':   p['lat'], 'plan_lon': p['lon'],
+            'real_lat':   a['lat'], 'real_lon': a['lon'],
         })
 
     matched    = len(planned) - not_found
@@ -169,7 +225,6 @@ def analyze(planned, actual):
             'matched':          matched,
             'in_order':         in_order,
             'out_order':        out_order,
-            'not_delivered':    not_delivered,
             'not_found':        not_found,
             'conformidade_pct': pct,
             'avg_desvio_pos':   avg_desvio,
