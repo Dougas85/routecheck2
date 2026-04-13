@@ -70,6 +70,12 @@ async function analyze() {
   hideError()
   setLoading(true)
 
+  // --- CORREÇÃO: LIMPEZA DE MEMÓRIA E INTERFACE ---
+  currentData = null; // Mata os dados da cidade anterior (ex: Araçatuba)
+  document.getElementById('tableBody').innerHTML = ''; // Limpa a tabela
+  if (mapInstance) { mapInstance.remove(); mapInstance = null; } // Reseta o mapa
+  // ------------------------------------------------
+
   const fd = new FormData()
   fd.append('kmz', file)
   fd.append('actual', text)
@@ -82,6 +88,8 @@ async function analyze() {
     showResult(data)
   } catch (e) {
     showError(e.message)
+    document.getElementById('resultView').classList.add('hidden')
+    document.getElementById('uploadView').classList.remove('hidden')
   } finally {
     setLoading(false)
   }
