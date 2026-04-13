@@ -28,30 +28,48 @@ def parse_kmz(file_bytes):
     return parse_kml(kml_text)
 
 def parse_kml(text):
+    # Remove namespaces para facilitar o Regex
+    text = re.sub(r'\sxmlns="[^"]+"', '', text, count=1)
     placemarks = re.findall(r'<Placemark[^>]*>(.*?)</Placemark>', text, re.DOTALL)
     stops = []
+    
     for i, pm in enumerate(placemarks):
         code_m   = re.search(r'<td>ID</td>\s*<td>([^<]+)</td>', pm)
         obj_id_m = re.search(r'<td>ObjectId</td>\s*<td>(\d+)</td>', pm)
         coord_m  = re.search(r'<coordinates>\s*([^<]+)\s*</coordinates>', pm)
         name_m   = re.search(r'<n>([^<]+)</n>', pm)
 
-        code   = (code_m.group(1).strip() if code_m
-                  else (name_m.group(1).strip() if name_m else f'#{i}'))
+        code = (code_m.group(1).strip() if code_m 
+                else (name_m.group(1).strip() if name_m else f'#{i}'))
         obj_id = int(obj_id_m.group(1)) if obj_id_m else i + 1
 
         if not coord_m:
             continue
 
-        raw   = coord_m.group(1).strip().split()[0]
-        parts = raw.split(',')
+        # --- CORREÇÃO ROBUSTA DE COORDENADAS ---
+        # 1. Pega apenas a primeira tripla (lon,lat,alt) e limpa espaços
+        raw_coords = coord_m.group(1).strip().split()[0]
+        parts = raw_coords.split(',')
+        
         try:
-            if len(parts) >= 4:
-                lon = float(f"{parts[0]}.{parts[1]}")
-                lat = float(f"{parts[2]}.{parts[3]}")
+            # KML padrão é sempre Longitude, Latitude, [Altitude]
+            # Usamos replace para garantir que o separador decimal seja PONTO
+            lon_str = parts[0].strip()
+            lat_str = parts[1].strip()
+            
+            # Se a string veio com vírgula onde devia ser ponto (ex: -47,38)
+            if ',' in lon_str or len(parts) > 2:
+                # Caso especial: se o split por vírgula resultou em muitos pedaços, 
+                # pode ser que a vírgula foi usada como decimal.
+                # Vamos reconstruir apenas se necessário.
+                lon = float(lon_str.replace(',', '.'))
+                lat = float(lat_str.replace(',', '.'))
             else:
-                lon, lat = float(parts[0]), float(parts[1])
+                lon = float(lon_str)
+                lat = float(lat_str)
+                
         except (ValueError, IndexError):
+            print(f"Erro ao processar coordenadas do objeto {code}: {parts}")
             continue
 
         stops.append({'seq': obj_id, 'code': code, 'lat': lat, 'lon': lon})
