@@ -176,7 +176,6 @@ function renderMetrics(s) {
     { icon: `<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,                label: 'Não encontrados',val: s.not_found,       color: 'var(--info)' },
     { icon: `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,                                                                              label: 'Desvio médio',   val: `${s.avg_desvio_pos} pos.`, color: 'var(--t2)' },
     { icon: `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,                                                             label: 'Janela',         val: s.start_time ? `${s.start_time}–${s.end_time}` : '—', color: 'var(--t2)' },
-    { icon: `<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>`,                           label: 'Dist. total',    val: `${s.total_dist_km} km`, color: 'var(--t2)' },
   ]
   document.getElementById('metricsGrid').innerHTML = cards.map((c, i) => `
     <div class="metric-card fade-${Math.min(i, 3)}">
