@@ -153,6 +153,7 @@ def analyze(planned, actual):
         if seqs_real:
             # A "chegada" ao ponto é a menor sequência real do grupo
             arrival_real = min(seqs_real) 
+            is_group_in_order = (p_min - 1) <= arrival_real <= (p_min + 1)
             group_data[gid] = {
                 'p_min': p_min,
                 'p_max': p_max,
