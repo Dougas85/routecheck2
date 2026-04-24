@@ -115,7 +115,7 @@ def parse_actual(text):
 def analyze(planned, actual):
     from collections import defaultdict
 
-    # 1. Mapa código → objeto percorrido (deduplicado)
+    # 1. Mapa código → objeto percorrido
     actual_map = {}
     seen = set()
     for a in actual:
@@ -123,13 +123,13 @@ def analyze(planned, actual):
             seen.add(a['code'])
             actual_map[a['code']] = a
 
-    # 2. Construir grupos por coordenada (Mesmo local = Mesmo Grupo)
+    # 2. Construir grupos por coordenada
     coord_to_gid  = {}
-    groups        = []   # lista de listas de objetos planejados
+    groups        = []   
     code_to_group = {}
 
     for p in planned:
-        # Arredondamento para agrupar objetos no mesmo local
+        # Agrupamento por proximidade de coordenadas (4 casas decimais)
         key = (round(p['lat'], 4), round(p['lon'], 4))
         if key not in coord_to_gid:
             coord_to_gid[key] = len(groups)
@@ -138,32 +138,34 @@ def analyze(planned, actual):
         groups[gid].append(p)
         code_to_group[p['code']] = gid
 
-    # 3. Calcular a janela esperada e a sequência real do GRUPO
-    # NOVIDADE: Vamos descobrir qual foi a primeira e a última vez que o motorista 
-    # passou por essa coordenada na vida real.
+    # 3. Calcular a validade do GRUPO com RIGOR no início
     group_data = {}
     for gid, items in enumerate(groups):
-        # Planejado
         seqs_plan = [p['seq'] for p in items]
-        p_min, p_max = min(seqs_plan), max(seqs_plan)
+        p_min = min(seqs_plan) # Onde o grupo DEVERIA começar
+        p_max = max(seqs_plan)
         
-        # Real: Buscar a menor sequência real entre todos os objetos do grupo
+        # Sequências reais registradas para este grupo
         seqs_real = [actual_map[p['code']]['seq'] for p in items if p['code'] in actual_map]
         
         if seqs_real:
-            # A "chegada" ao ponto é a menor sequência real do grupo
-            arrival_real = min(seqs_real) 
+            arrival_real = min(seqs_real) # A primeira bipada no local
+            
+            # --- AQUI ESTÁ A MUDANÇA ---
+            # REGRA: O motorista chegou no endereço dentro da janela do PRIMEIRO objeto?
+            # Se o grupo começa no 6º, ele aceita chegada na 5ª, 6ª ou 7ª posição real.
             is_group_in_order = (p_min - 1) <= arrival_real <= (p_min + 1)
+            
             group_data[gid] = {
                 'p_min': p_min,
                 'p_max': p_max,
                 'arrival_real': arrival_real,
-                'is_group_in_order': (p_min - 1) <= arrival_real <= (p_max + 1)
+                'is_group_in_order': is_group_in_order
             }
         else:
             group_data[gid] = None
 
-    # 4. Avaliar cada objeto com base no status do seu grupo
+    # 4. Avaliar cada objeto
     results    = []
     in_order   = 0
     out_order  = 0
@@ -184,7 +186,7 @@ def analyze(planned, actual):
             })
             continue
 
-        # LOGICA DE GRUPO: O objeto herda o status do grupo
+        # O objeto herda o status do "Check-in" do grupo
         em_ordem = g_info['is_group_in_order']
         real_seq = a['seq']
 
@@ -195,14 +197,14 @@ def analyze(planned, actual):
         else:
             out_order += 1
             conf = 'fora_de_ordem'
-            # O desvio é calculado com base na chegada do grupo ao ponto
-            centro_planejado = (g_info['p_min'] + g_info['p_max']) / 2
-            diff = round(g_info['arrival_real'] - centro_planejado)
+            # O desvio agora é calculado em relação ao início exato planejado
+            diff = g_info['arrival_real'] - g_info['p_min']
             desvios.append(abs(diff))
 
         if a['dist_m']:
             total_dist += a['dist_m']
 
+        # Label para a tabela (mostra o intervalo planejado)
         exp_label = f"{g_info['p_min']}–{g_info['p_max']}"
 
         results.append({
@@ -221,7 +223,7 @@ def analyze(planned, actual):
             'real_lat': a['lat'], 'real_lon': a['lon'],
         })
 
-    # Resumo final (Summary)
+    # Resumo final
     matched = len(planned) - not_found
     pct = round(in_order / matched * 100) if matched else 0
     avg_desvio = round(sum(desvios) / len(desvios)) if desvios else 0
@@ -243,7 +245,6 @@ def analyze(planned, actual):
         },
         'results': results,
     }
-
 
 # ─── Rotas ────────────────────────────────────────────────────────────────────
 @app.route('/')
