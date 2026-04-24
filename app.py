@@ -112,11 +112,10 @@ def parse_actual(text):
         })
     return stops
 
-# ─── Análise ──────────────────────────────────────────────────────────────────
 def analyze(planned, actual):
     from collections import defaultdict
 
-    # Mapa código → objeto percorrido (deduplicado)
+    # 1. Mapa código → objeto percorrido (deduplicado)
     actual_map = {}
     seen = set()
     for a in actual:
@@ -124,15 +123,13 @@ def analyze(planned, actual):
             seen.add(a['code'])
             actual_map[a['code']] = a
 
-    # ── Construir grupos por coordenada ───────────────────────────────────────
-    # Objetos com mesma coordenada no KMZ = mesmo local de entrega = mesmo grupo.
-    # Arredondamos em 4 casas decimais (~11m de tolerância) para absorver
-    # pequenas variações de GPS entre objetos do mesmo endereço.
+    # 2. Construir grupos por coordenada (Mesmo local = Mesmo Grupo)
     coord_to_gid  = {}
     groups        = []   # lista de listas de objetos planejados
     code_to_group = {}
 
     for p in planned:
+        # Arredondamento para agrupar objetos no mesmo local
         key = (round(p['lat'], 4), round(p['lon'], 4))
         if key not in coord_to_gid:
             coord_to_gid[key] = len(groups)
@@ -141,22 +138,31 @@ def analyze(planned, actual):
         groups[gid].append(p)
         code_to_group[p['code']] = gid
 
-    # ── Calcular janela esperada na percorrida para cada grupo ────────────────
-    # O TMS pode numerar objetos do mesmo local com seqs diferentes (ex: 45..53
-    # embaralhados). A percorrida sempre os lista em sequência contínua.
-    # Janela = [min_seq_do_grupo .. min_seq_do_grupo + tamanho - 1]
-    # Expandida para cobrir também o max_seq caso o TMS use números maiores.
-    group_expected_range = {}
+    # 3. Calcular a janela esperada e a sequência real do GRUPO
+    # NOVIDADE: Vamos descobrir qual foi a primeira e a última vez que o motorista 
+    # passou por essa coordenada na vida real.
+    group_data = {}
     for gid, items in enumerate(groups):
-        seqs       = [p['seq'] for p in items]
-        seq_min    = min(seqs)
-        seq_max    = max(seqs)
-        group_size = len(items)
-        real_min   = seq_min
-        real_max   = max(seq_min + group_size - 1, seq_max)
-        group_expected_range[gid] = (real_min, real_max)
+        # Planejado
+        seqs_plan = [p['seq'] for p in items]
+        p_min, p_max = min(seqs_plan), max(seqs_plan)
+        
+        # Real: Buscar a menor sequência real entre todos os objetos do grupo
+        seqs_real = [actual_map[p['code']]['seq'] for p in items if p['code'] in actual_map]
+        
+        if seqs_real:
+            # A "chegada" ao ponto é a menor sequência real do grupo
+            arrival_real = min(seqs_real) 
+            group_data[gid] = {
+                'p_min': p_min,
+                'p_max': p_max,
+                'arrival_real': arrival_real,
+                'is_group_in_order': (p_min - 1) <= arrival_real <= (p_max + 1)
+            }
+        else:
+            group_data[gid] = None
 
-    # ── Avaliar cada objeto ────────────────────────────────────────────────────
+    # 4. Avaliar cada objeto com base no status do seu grupo
     results    = []
     in_order   = 0
     out_order  = 0
@@ -166,28 +172,20 @@ def analyze(planned, actual):
 
     for p in planned:
         a = actual_map.get(p['code'])
-        gid        = code_to_group[p['code']]
-        grupo_size = len(groups[gid])
+        gid = code_to_group[p['code']]
+        g_info = group_data[gid]
 
         if not a:
             not_found += 1
             results.append({
-                'plan_seq': p['seq'], 'real_seq': None,
-                'code': p['code'], 'time': None,
-                'status': None, 'cep': None, 'addr': None,
-                'conformidade': 'nao_encontrado', 'diff': 0,
-                'grupo_size': grupo_size,
-                'expected_range': None,
-                'plan_lat': p['lat'], 'plan_lon': p['lon'],
-                'real_lat': None, 'real_lon': None,
+                'plan_seq': p['seq'], 'real_seq': None, 'code': p['code'],
+                'conformidade': 'nao_encontrado', 'diff': 0
             })
             continue
 
-        rmin, rmax = group_expected_range[gid]
-        real_seq   = a['seq']
-
-        # Em ordem se a seq real cai dentro da janela do grupo (± 1 de tolerância)
-        em_ordem = (rmin - 1) <= real_seq <= (rmax + 1)
+        # LOGICA DE GRUPO: O objeto herda o status do grupo
+        em_ordem = g_info['is_group_in_order']
+        real_seq = a['seq']
 
         if em_ordem:
             in_order += 1
@@ -195,50 +193,52 @@ def analyze(planned, actual):
             diff = 0
         else:
             out_order += 1
-            conf  = 'fora_de_ordem'
-            centro = (rmin + rmax) / 2
-            diff   = round(real_seq - centro)
+            conf = 'fora_de_ordem'
+            # O desvio é calculado com base na chegada do grupo ao ponto
+            centro_planejado = (g_info['p_min'] + g_info['p_max']) / 2
+            diff = round(g_info['arrival_real'] - centro_planejado)
             desvios.append(abs(diff))
 
         if a['dist_m']:
             total_dist += a['dist_m']
 
-        exp_label = f"{rmin}–{rmax}" if rmin != rmax else str(rmin)
+        exp_label = f"{g_info['p_min']}–{g_info['p_max']}"
 
         results.append({
-            'plan_seq':      p['seq'],
-            'real_seq':      real_seq,
-            'code':          p['code'],
-            'time':          a['time'],
-            'status':        a['status'],
-            'cep':           a['cep'],
-            'addr':          a['addr'],
-            'conformidade':  conf,
-            'diff':          diff,
-            'grupo_size':    grupo_size,
+            'plan_seq': p['seq'],
+            'real_seq': real_seq,
+            'code': p['code'],
+            'time': a['time'],
+            'status': a['status'],
+            'cep': a['cep'],
+            'addr': a['addr'],
+            'conformidade': conf,
+            'diff': diff,
+            'grupo_size': len(groups[gid]),
             'expected_range': exp_label,
-            'plan_lat':      p['lat'], 'plan_lon': p['lon'],
-            'real_lat':      a['lat'], 'real_lon': a['lon'],
+            'plan_lat': p['lat'], 'plan_lon': p['lon'],
+            'real_lat': a['lat'], 'real_lon': a['lon'],
         })
 
-    matched    = len(planned) - not_found
-    pct        = round(in_order / matched * 100) if matched else 0
+    # Resumo final (Summary)
+    matched = len(planned) - not_found
+    pct = round(in_order / matched * 100) if matched else 0
     avg_desvio = round(sum(desvios) / len(desvios)) if desvios else 0
-    times      = sorted(r['time'] for r in results if r['time'])
+    times = sorted(r['time'] for r in results if r.get('time'))
 
     return {
         'summary': {
-            'total_planned':    len(planned),
-            'total_actual':     len(actual_map),
-            'matched':          matched,
-            'in_order':         in_order,
-            'out_order':        out_order,
-            'not_found':        not_found,
+            'total_planned': len(planned),
+            'total_actual': len(actual_map),
+            'matched': matched,
+            'in_order': in_order,
+            'out_order': out_order,
+            'not_found': not_found,
             'conformidade_pct': pct,
-            'avg_desvio_pos':   avg_desvio,
-            'total_dist_km':    round(total_dist / 1000, 1),
-            'start_time':       times[0]  if times else None,
-            'end_time':         times[-1] if times else None,
+            'avg_desvio_pos': avg_desvio,
+            'total_dist_km': round(total_dist / 1000, 1),
+            'start_time': times[0] if times else None,
+            'end_time': times[-1] if times else None,
         },
         'results': results,
     }
