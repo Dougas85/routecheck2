@@ -234,7 +234,7 @@ body {
 /* Metric cards */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: .75rem; margin-bottom: 1.5rem;
 }
 .metric-card {
