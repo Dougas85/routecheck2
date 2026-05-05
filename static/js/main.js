@@ -11,8 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTextarea()
   setupAnalyzeBtn()
   setupReset()
-  setupTabsOnce()   // listeners de tabs registrados UMA única vez
-  setupSortOnce()   // listeners de sort registrados UMA única vez
+  setupTabsOnce()
+  setupSortOnce()
+  setupPdfExport()
 })
 
 /* ── Drop zone ─────────────────────────────────────────── */
@@ -73,7 +74,6 @@ async function analyze() {
   hideError()
   setLoading(true)
 
-  // Limpa estado anterior completamente antes de qualquer coisa
   currentData   = null
   currentFilter = 'all'
   sortCol       = 'plan_seq'
@@ -123,13 +123,12 @@ function showResult(data) {
   document.getElementById('uploadView').classList.add('hidden')
   document.getElementById('resultView').classList.remove('hidden')
   document.getElementById('btnReset').classList.remove('hidden')
+  document.getElementById('btnExportPdf').classList.remove('hidden')
 
-  // Garante volta para aba tabela a cada nova análise
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0))
   document.getElementById('tabTable').classList.remove('hidden')
   document.getElementById('tabMap').classList.add('hidden')
 
-  // Reseta indicadores de sort visualmente
   document.querySelectorAll('th[data-col]').forEach(th => {
     th.classList.remove('sorted')
     th.querySelector('.sort-icon').textContent = ''
@@ -139,8 +138,8 @@ function showResult(data) {
 
   renderBanner(data.summary)
   renderMetrics(data.summary)
-  renderFilters(data.summary)   // recria pills de filtro
-  renderTable(data.results)     // renderiza tabela com estado limpo
+  renderFilters(data.summary)
+  renderTable(data.results)
 }
 
 /* ── Banner ─────────────────────────────────────────────── */
@@ -237,7 +236,7 @@ function renderTable(results) {
   document.getElementById('tableCount').textContent = `${sorted.length} de ${results.length} registros`
 }
 
-/* ── Filtros — recriados a cada análise ─────────────────── */
+/* ── Filtros ────────────────────────────────────────────── */
 function renderFilters(s) {
   const filters = [
     { key: 'all',            label: `Todas (${currentData.results.length})` },
@@ -246,8 +245,7 @@ function renderFilters(s) {
     { key: 'nao_encontrado', label: `Não encontrados (${s.not_found})` },
   ]
 
-  const wrap = document.getElementById('filterPills')
-  // Substitui o elemento para garantir que não há listeners antigos
+  const wrap    = document.getElementById('filterPills')
   const newWrap = wrap.cloneNode(false)
   wrap.parentNode.replaceChild(newWrap, wrap)
 
@@ -265,7 +263,7 @@ function renderFilters(s) {
   })
 }
 
-/* ── Sort — registrado UMA vez no DOMContentLoaded ──────── */
+/* ── Sort ───────────────────────────────────────────────── */
 function setupSortOnce() {
   document.getElementById('detailTable').addEventListener('click', e => {
     const th = e.target.closest('th[data-col]')
@@ -282,7 +280,7 @@ function setupSortOnce() {
   })
 }
 
-/* ── Tabs — registrado UMA vez no DOMContentLoaded ──────── */
+/* ── Tabs ───────────────────────────────────────────────── */
 function setupTabsOnce() {
   document.querySelector('.tabs').addEventListener('click', e => {
     const btn = e.target.closest('.tab-btn')
@@ -312,14 +310,13 @@ function renderMap(results) {
     attribution: '© OpenStreetMap contributors', maxZoom: 19,
   }).addTo(mapInstance)
 
-  const bounds    = []
+  const bounds     = []
   const confColors = {
     em_ordem:       '#22c98a',
     fora_de_ordem:  '#f05252',
     nao_encontrado: '#4f8ef7',
   }
 
-  // Rota prevista (tracejado azul)
   const plannedLine = results
     .filter(r => r.plan_lat && r.plan_lon)
     .sort((a, b) => a.plan_seq - b.plan_seq)
@@ -328,7 +325,6 @@ function renderMap(results) {
     L.polyline(plannedLine, { color: '#4f8ef7', weight: 2, opacity: .4, dashArray: '6 4' })
       .addTo(mapInstance).bindTooltip('Rota prevista (TMS)')
 
-  // Rota percorrida (sólida verde)
   const actualLine = results
     .filter(r => r.real_lat && r.real_lon)
     .sort((a, b) => (a.real_seq || 0) - (b.real_seq || 0))
@@ -337,14 +333,12 @@ function renderMap(results) {
     L.polyline(actualLine, { color: '#22c98a', weight: 2, opacity: .5 })
       .addTo(mapInstance).bindTooltip('Rota percorrida')
 
-  // Linhas de desvio
   results.forEach(r => {
     if (r.conformidade === 'fora_de_ordem' && r.plan_lat && r.real_lat)
       L.polyline([[r.plan_lat, r.plan_lon], [r.real_lat, r.real_lon]],
         { color: '#f05252', weight: 1, opacity: .2, dashArray: '3 3' }).addTo(mapInstance)
   })
 
-  // Marcadores
   results.forEach(r => {
     const lat = r.real_lat || r.plan_lat
     const lon = r.real_lon || r.plan_lon
@@ -374,7 +368,7 @@ function renderMap(results) {
   if (bounds.length) mapInstance.fitBounds(bounds, { padding: [40, 40] })
 }
 
-/* ── Reset — registrado UMA vez no DOMContentLoaded ─────── */
+/* ── Reset ──────────────────────────────────────────────── */
 function setupReset() {
   document.getElementById('btnReset').addEventListener('click', () => {
     currentData   = null
@@ -386,6 +380,7 @@ function setupReset() {
     document.getElementById('resultView').classList.add('hidden')
     document.getElementById('uploadView').classList.remove('hidden')
     document.getElementById('btnReset').classList.add('hidden')
+    document.getElementById('btnExportPdf').classList.add('hidden')
     document.getElementById('fileInput').value = ''
     document.getElementById('actualInput').value = ''
     document.getElementById('actualInput').classList.remove('filled')
@@ -405,4 +400,245 @@ function setupReset() {
     document.getElementById('tabTable').classList.remove('hidden')
     document.getElementById('tabMap').classList.add('hidden')
   })
+}
+
+/* ── PDF Export ─────────────────────────────────────────── */
+function setupPdfExport() {
+  document.getElementById('btnExportPdf').addEventListener('click', () => {
+    if (!currentData) return
+    generatePdf(currentData.summary, currentData.results)
+  })
+}
+
+function generatePdf(s, results) {
+  const btn = document.getElementById('btnExportPdf')
+  btn.disabled = true
+  btn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div> Gerando...`
+
+  try {
+    const { jsPDF } = window.jspdf
+    const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const pW   = 210
+    const pH   = 297
+    const mg   = 14
+    let   y    = mg
+
+    // ── Cabeçalho ──────────────────────────────────────────
+    pdf.setFillColor(10, 12, 16)
+    pdf.rect(0, 0, pW, 32, 'F')
+
+    // Ícone logo
+    pdf.setFillColor(79, 142, 247)
+    pdf.roundedRect(mg, 8, 16, 16, 3, 3, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text('RC', mg + 8, 18, { align: 'center' })
+
+    // Título
+    pdf.setFontSize(17)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setTextColor(240, 242, 247)
+    pdf.text('RouteCheck', mg + 20, 15)
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(139, 146, 165)
+    pdf.text('Relatório de Conformidade de Rotas', mg + 20, 22)
+
+    // Data
+    pdf.setFontSize(8)
+    pdf.setTextColor(74, 81, 104)
+    pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pW - mg, 22, { align: 'right' })
+
+    y = 42
+
+    // ── Banner de conformidade ──────────────────────────────
+    const pct   = s.conformidade_pct
+    const level = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad'
+    const levelColors = {
+      ok:   { bg: [34, 201, 138], text: [20, 80, 50],   label: 'Boa conformidade' },
+      warn: { bg: [245, 166, 35], text: [100, 60, 10],  label: 'Conformidade parcial' },
+      bad:  { bg: [240, 82,  82], text: [100, 20, 20],  label: 'Rota não seguida' },
+    }
+    const lc = levelColors[level]
+    pdf.setFillColor(...lc.bg)
+    pdf.roundedRect(mg, y, pW - mg * 2, 18, 3, 3, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.setTextColor(...lc.text)
+    pdf.text(`${lc.label}: ${pct}% das paradas seguiram a sequência prevista`, mg + 6, y + 11)
+    pdf.setFontSize(14)
+    pdf.text(`${pct}%`, pW - mg - 6, y + 12, { align: 'right' })
+    y += 26
+
+    // ── Grid de métricas ────────────────────────────────────
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.setTextColor(240, 242, 247)
+    pdf.text('Resumo da análise', mg, y)
+    y += 6
+
+    const metrics = [
+      { label: 'Previstas (TMS)',  val: String(s.total_planned),              color: [240, 242, 247] },
+      { label: 'Em ordem',         val: String(s.in_order),                   color: [34,  201, 138] },
+      { label: 'Fora de ordem',    val: String(s.out_order),                  color: [240, 82,  82]  },
+      { label: 'Não encontrados',  val: String(s.not_found),                  color: [79,  142, 247] },
+      { label: 'Desvio médio',     val: `${s.avg_desvio_pos} posições`,       color: [139, 146, 165] },
+      { label: 'Distância total',  val: `${s.total_dist_km} km`,              color: [139, 146, 165] },
+      { label: 'Início da rota',   val: s.start_time || '—',                  color: [139, 146, 165] },
+      { label: 'Fim da rota',      val: s.end_time || '—',                    color: [139, 146, 165] },
+    ]
+
+    const cols  = 4
+    const cardW = (pW - mg * 2 - (cols - 1) * 4) / cols
+    const cardH = 18
+
+    metrics.forEach((m, i) => {
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      const cx  = mg + col * (cardW + 4)
+      const cy  = y + row * (cardH + 4)
+
+      pdf.setFillColor(22, 27, 38)
+      pdf.roundedRect(cx, cy, cardW, cardH, 2, 2, 'F')
+      pdf.setDrawColor(46, 53, 70)
+      pdf.setLineWidth(0.3)
+      pdf.roundedRect(cx, cy, cardW, cardH, 2, 2, 'S')
+
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7)
+      pdf.setTextColor(74, 81, 104)
+      pdf.text(m.label.toUpperCase(), cx + 5, cy + 6)
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(12)
+      pdf.setTextColor(...m.color)
+      pdf.text(m.val, cx + 5, cy + 14)
+    })
+
+    y += Math.ceil(metrics.length / cols) * (cardH + 4) + 8
+
+    // ── Tabela detalhada ────────────────────────────────────
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.setTextColor(240, 242, 247)
+    pdf.text('Detalhamento por objeto', mg, y)
+    y += 6
+
+    // Cabeçalho da tabela
+    const cols7  = ['Seq. TMS', 'Seq. real', 'Objeto', 'Horário', 'CEP', 'Desvio', 'Conformidade']
+    const widths = [20, 20, 44, 18, 22, 18, 44]
+    const rowH   = 7.5
+
+    pdf.setFillColor(30, 37, 53)
+    pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(7.5)
+    pdf.setTextColor(74, 81, 104)
+    let cx = mg + 3
+    cols7.forEach((col, i) => {
+      pdf.text(col.toUpperCase(), cx, y + 5)
+      cx += widths[i]
+    })
+    y += rowH
+
+    // Linhas de dados
+    const confMeta = {
+      em_ordem:       { label: 'Em ordem',       r: 34,  g: 201, b: 138 },
+      fora_de_ordem:  { label: 'Fora de ordem',  r: 240, g: 82,  b: 82  },
+      nao_encontrado: { label: 'Nao encontrado',  r: 79,  g: 142, b: 247 },
+    }
+
+    results.forEach((row, idx) => {
+      // Nova página se necessário
+      if (y + rowH > pH - mg - 10) {
+        // Rodapé da página atual
+        _pdfFooter(pdf, pW, pH)
+        pdf.addPage()
+        y = mg
+        // Repetir cabeçalho da tabela na nova página
+        pdf.setFillColor(30, 37, 53)
+        pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(74, 81, 104)
+        let hx = mg + 3
+        cols7.forEach((col, i) => { pdf.text(col.toUpperCase(), hx, y + 5); hx += widths[i] })
+        y += rowH
+      }
+
+      // Fundo alternado
+      const isEven = idx % 2 === 0
+      pdf.setFillColor(isEven ? 16 : 22, isEven ? 20 : 27, isEven ? 28 : 38)
+      pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
+
+      const meta = confMeta[row.conformidade] || confMeta['nao_encontrado']
+      const diff = row.conformidade === 'fora_de_ordem'
+        ? (row.diff > 0 ? `+${row.diff}` : String(row.diff))
+        : '—'
+
+      const cells = [
+        { text: `${row.plan_seq}`,                color: [139, 146, 165], bold: false },
+        { text: row.real_seq != null ? `${row.real_seq}` : '—', color: [139, 146, 165], bold: false },
+        { text: row.code,                          color: [240, 242, 247], bold: true  },
+        { text: row.time || '—',                   color: [139, 146, 165], bold: false },
+        { text: row.cep || '—',                    color: [74,  81, 104],  bold: false },
+        { text: diff,
+          color: row.conformidade === 'fora_de_ordem'
+            ? (row.diff > 0 ? [240, 82, 82] : [245, 166, 35])
+            : [74, 81, 104],
+          bold: row.conformidade === 'fora_de_ordem' },
+        { text: meta.label, color: [meta.r, meta.g, meta.b], bold: true },
+      ]
+
+      let px = mg + 3
+      cells.forEach((cell, i) => {
+        pdf.setFont('helvetica', cell.bold ? 'bold' : 'normal')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(...cell.color)
+        // Truncar texto longo para caber na coluna
+        const maxW = widths[i] - 4
+        let txt = cell.text
+        while (txt.length > 3 && pdf.getTextWidth(txt) > maxW) txt = txt.slice(0, -1)
+        if (txt !== cell.text) txt = txt.slice(0, -1) + '…'
+        pdf.text(txt, px, y + 5)
+        px += widths[i]
+      })
+
+      // Linha divisória fina
+      pdf.setDrawColor(30, 37, 53)
+      pdf.setLineWidth(0.2)
+      pdf.line(mg, y + rowH, pW - mg, y + rowH)
+      y += rowH
+    })
+
+    // ── Rodapé em todas as páginas ──────────────────────────
+    const totalPages = pdf.internal.getNumberOfPages()
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p)
+      _pdfFooter(pdf, pW, pH, p, totalPages)
+    }
+
+    // ── Salvar ──────────────────────────────────────────────
+    const date = new Date().toISOString().slice(0, 10)
+    pdf.save(`RouteCheck_${date}.pdf`)
+
+  } finally {
+    btn.disabled = false
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar PDF`
+  }
+}
+
+function _pdfFooter(pdf, pW, pH, current, total) {
+  pdf.setFillColor(10, 12, 16)
+  pdf.rect(0, pH - 10, pW, 10, 'F')
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7.5)
+  pdf.setTextColor(74, 81, 104)
+  pdf.text('RouteCheck · DFS · Uso interno', 14, pH - 4)
+  if (current && total) {
+    pdf.text(`Página ${current} de ${total}`, pW - 14, pH - 4, { align: 'right' })
+  }
 }
