@@ -79,6 +79,35 @@ body {
 .btn-reset:hover { color: var(--t1); }
 .btn-reset svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
 
+/* ── Botão Exportar PDF (adicionar ao style.css) ─────────
+   Cole este bloco logo após .btn-reset na seção de header  */
+
+.btn-export-pdf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #4f8ef7, #22c98a);
+  border: none;
+  border-radius: var(--r-sm);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-b);
+  cursor: pointer;
+  transition: opacity .2s, transform .15s;
+  white-space: nowrap;
+}
+.btn-export-pdf:hover   { opacity: .88; transform: translateY(-1px); }
+.btn-export-pdf:active  { transform: translateY(0); }
+.btn-export-pdf:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.btn-export-pdf svg {
+  width: 14px; height: 14px;
+  stroke: #fff; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
 /* ── Upload view ─────────────────────────────────────────── */
 .upload-view {
   min-height: calc(100vh - 58px);
