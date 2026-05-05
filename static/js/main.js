@@ -415,180 +415,224 @@ function generatePdf(s, results) {
   btn.disabled = true
   btn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div> Gerando...`
 
+  // ── Paleta light profissional ───────────────────────────
+  // Fundo página:   branco puro        [255,255,255]
+  // Header topo:    azul escuro rico   [30, 58, 120]
+  // Accent line:    azul médio         [59, 130, 246]
+  // Cards bg:       cinza levíssimo    [247,249,252]
+  // Cards border:   cinza claro        [226,232,240]
+  // Texto primário: quase preto        [15, 23, 42]
+  // Texto secundário:cinza médio       [100,116,139]
+  // Thead bg:       azul muito suave   [239,246,255]
+  // Thead texto:    azul escuro        [30, 64,175]
+  // Linha par:      branco             [255,255,255]
+  // Linha ímpar:    azul ultra-suave   [248,250,255]
+  // Verde ok:       [16, 185, 129]
+  // Vermelho bad:   [239, 68, 68]
+  // Amarelo warn:   [245,158,11]
+  // Azul info:      [59,130,246]
+
   try {
     const { jsPDF } = window.jspdf
-    const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-    const pW   = 210
-    const pH   = 297
-    const mg   = 14
-    let   y    = mg
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const pW  = 210
+    const pH  = 297
+    const mg  = 14
+    let   y   = 0
 
-    // ── Cabeçalho ──────────────────────────────────────────
-    pdf.setFillColor(10, 12, 16)
-    pdf.rect(0, 0, pW, 32, 'F')
+    // ── Fundo branco total ──────────────────────────────────
+    pdf.setFillColor(255, 255, 255)
+    pdf.rect(0, 0, pW, pH, 'F')
 
-    // Ícone logo
-    pdf.setFillColor(79, 142, 247)
-    pdf.roundedRect(mg, 8, 16, 16, 3, 3, 'F')
+    // ── Cabeçalho azul ──────────────────────────────────────
+    pdf.setFillColor(30, 58, 120)
+    pdf.rect(0, 0, pW, 36, 'F')
+
+    // Linha accent na base do header
+    pdf.setFillColor(59, 130, 246)
+    pdf.rect(0, 36, pW, 1.2, 'F')
+
+    // Logo pill
+    pdf.setFillColor(59, 130, 246)
+    pdf.roundedRect(mg, 9, 18, 18, 3, 3, 'F')
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(9)
     pdf.setTextColor(255, 255, 255)
-    pdf.text('RC', mg + 8, 18, { align: 'center' })
+    pdf.text('RC', mg + 9, 20, { align: 'center' })
 
-    // Título
-    pdf.setFontSize(17)
+    // Título e subtítulo
+    pdf.setFontSize(16)
     pdf.setFont('helvetica', 'bold')
-    pdf.setTextColor(240, 242, 247)
-    pdf.text('RouteCheck', mg + 20, 15)
-    pdf.setFontSize(9)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text('RouteCheck', mg + 22, 18)
+
+    pdf.setFontSize(8.5)
     pdf.setFont('helvetica', 'normal')
-    pdf.setTextColor(139, 146, 165)
-    pdf.text('Relatório de Conformidade de Rotas', mg + 20, 22)
+    pdf.setTextColor(147, 197, 253)
+    pdf.text('Relatório de Conformidade de Rotas', mg + 22, 26)
 
-    // Data
-    pdf.setFontSize(8)
-    pdf.setTextColor(74, 81, 104)
-    pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pW - mg, 22, { align: 'right' })
+    // Data/hora — direita
+    pdf.setFontSize(7.5)
+    pdf.setTextColor(147, 197, 253)
+    pdf.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, pW - mg, 26, { align: 'right' })
 
-    y = 42
+    y = 46
 
     // ── Banner de conformidade ──────────────────────────────
     const pct   = s.conformidade_pct
     const level = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad'
-    const levelColors = {
-      ok:   { bg: [34, 201, 138], text: [20, 80, 50],   label: 'Boa conformidade' },
-      warn: { bg: [245, 166, 35], text: [100, 60, 10],  label: 'Conformidade parcial' },
-      bad:  { bg: [240, 82,  82], text: [100, 20, 20],  label: 'Rota não seguida' },
+
+    const levelCfg = {
+      ok:   { bgFill:[240,253,244], bgBorder:[134,239,172], barColor:[16,185,129],  textColor:[22,101,52],  label:'Boa conformidade'      },
+      warn: { bgFill:[255,251,235], bgBorder:[253,230,138], barColor:[245,158, 11], textColor:[120,53,15],  label:'Conformidade parcial'   },
+      bad:  { bgFill:[254,242,242], bgBorder:[252,165,165], barColor:[239, 68, 68], textColor:[153,27,27],  label:'Rota nao seguida'       },
     }
-    const lc = levelColors[level]
-    pdf.setFillColor(...lc.bg)
-    pdf.roundedRect(mg, y, pW - mg * 2, 18, 3, 3, 'F')
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(11)
-    pdf.setTextColor(...lc.text)
-    pdf.text(`${lc.label}: ${pct}% das paradas seguiram a sequência prevista`, mg + 6, y + 11)
-    pdf.setFontSize(14)
-    pdf.text(`${pct}%`, pW - mg - 6, y + 12, { align: 'right' })
-    y += 26
+    const lc = levelCfg[level]
 
-    // ── Grid de métricas ────────────────────────────────────
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(10)
-    pdf.setTextColor(240, 242, 247)
-    pdf.text('Resumo da análise', mg, y)
-    y += 6
+    // Card banner
+    pdf.setFillColor(...lc.bgFill)
+    pdf.roundedRect(mg, y, pW - mg * 2, 20, 3, 3, 'F')
+    pdf.setDrawColor(...lc.bgBorder)
+    pdf.setLineWidth(0.4)
+    pdf.roundedRect(mg, y, pW - mg * 2, 20, 3, 3, 'S')
 
+    // Barra colorida esquerda
+    pdf.setFillColor(...lc.barColor)
+    pdf.roundedRect(mg, y, 3, 20, 1.5, 1.5, 'F')
+
+    // Texto
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10.5)
+    pdf.setTextColor(...lc.textColor)
+    pdf.text(`${lc.label}: ${pct}% das paradas seguiram a sequência prevista`, mg + 8, y + 12)
+
+    // Percentual grande direita
+    pdf.setFontSize(18)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setTextColor(...lc.barColor)
+    pdf.text(`${pct}%`, pW - mg - 4, y + 14, { align: 'right' })
+
+    y += 28
+
+    // ── Seção: Resumo ───────────────────────────────────────
+    // Título de seção com linha
+    _sectionTitle(pdf, 'Resumo da análise', mg, y, pW)
+    y += 8
+
+    // 7 métricas em grid 4+3 (sem distância)
     const metrics = [
-      { label: 'Previstas (TMS)',  val: String(s.total_planned),              color: [240, 242, 247] },
-      { label: 'Em ordem',         val: String(s.in_order),                   color: [34,  201, 138] },
-      { label: 'Fora de ordem',    val: String(s.out_order),                  color: [240, 82,  82]  },
-      { label: 'Não encontrados',  val: String(s.not_found),                  color: [79,  142, 247] },
-      { label: 'Desvio médio',     val: `${s.avg_desvio_pos} posições`,       color: [139, 146, 165] },
-      { label: 'Distância total',  val: `${s.total_dist_km} km`,              color: [139, 146, 165] },
-      { label: 'Início da rota',   val: s.start_time || '—',                  color: [139, 146, 165] },
-      { label: 'Fim da rota',      val: s.end_time || '—',                    color: [139, 146, 165] },
+      { label: 'Previstas (TMS)',  val: String(s.total_planned),        accent: [30,58,120]   },
+      { label: 'Em ordem',         val: String(s.in_order),             accent: [16,185,129]  },
+      { label: 'Fora de ordem',    val: String(s.out_order),            accent: [239,68,68]   },
+      { label: 'Nao encontrados',  val: String(s.not_found),            accent: [59,130,246]  },
+      { label: 'Desvio medio',     val: `${s.avg_desvio_pos} posicoes`, accent: [100,116,139] },
+      { label: 'Inicio da rota',   val: s.start_time || '—',            accent: [100,116,139] },
+      { label: 'Fim da rota',      val: s.end_time   || '—',            accent: [100,116,139] },
     ]
 
-    const cols  = 4
-    const cardW = (pW - mg * 2 - (cols - 1) * 4) / cols
-    const cardH = 18
+    const nCols = 4
+    const cardW = (pW - mg * 2 - (nCols - 1) * 3) / nCols
+    const cardH = 19
 
     metrics.forEach((m, i) => {
-      const col = i % cols
-      const row = Math.floor(i / cols)
-      const cx  = mg + col * (cardW + 4)
-      const cy  = y + row * (cardH + 4)
+      const col = i % nCols
+      const row = Math.floor(i / nCols)
+      const cx  = mg + col * (cardW + 3)
+      const cy  = y + row * (cardH + 3)
 
-      pdf.setFillColor(22, 27, 38)
+      // Card bg + border
+      pdf.setFillColor(247, 249, 252)
       pdf.roundedRect(cx, cy, cardW, cardH, 2, 2, 'F')
-      pdf.setDrawColor(46, 53, 70)
+      pdf.setDrawColor(226, 232, 240)
       pdf.setLineWidth(0.3)
       pdf.roundedRect(cx, cy, cardW, cardH, 2, 2, 'S')
 
+      // Accent top bar
+      pdf.setFillColor(...m.accent)
+      pdf.roundedRect(cx, cy, cardW, 2, 1, 1, 'F')
+
+      // Label
       pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(7)
-      pdf.setTextColor(74, 81, 104)
-      pdf.text(m.label.toUpperCase(), cx + 5, cy + 6)
+      pdf.setFontSize(6.5)
+      pdf.setTextColor(100, 116, 139)
+      pdf.text(m.label.toUpperCase(), cx + 4, cy + 8)
 
+      // Valor
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(12)
-      pdf.setTextColor(...m.color)
-      pdf.text(m.val, cx + 5, cy + 14)
+      pdf.setFontSize(13)
+      pdf.setTextColor(...m.accent)
+      pdf.text(m.val, cx + 4, cy + 16)
     })
 
-    y += Math.ceil(metrics.length / cols) * (cardH + 4) + 8
+    y += Math.ceil(metrics.length / nCols) * (cardH + 3) + 10
 
-    // ── Tabela detalhada ────────────────────────────────────
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(10)
-    pdf.setTextColor(240, 242, 247)
-    pdf.text('Detalhamento por objeto', mg, y)
-    y += 6
+    // ── Seção: Tabela ───────────────────────────────────────
+    _sectionTitle(pdf, 'Detalhamento por objeto', mg, y, pW)
+    y += 8
 
-    // Cabeçalho da tabela
-    const cols7  = ['Seq. TMS', 'Seq. real', 'Objeto', 'Horário', 'CEP', 'Desvio', 'Conformidade']
-    const widths = [20, 20, 44, 18, 22, 18, 44]
-    const rowH   = 7.5
+    const tCols   = ['Seq. TMS', 'Seq. real', 'Objeto', 'Horário', 'CEP', 'Desvio', 'Conformidade']
+    const tWidths = [20, 20, 44, 18, 22, 18, 40]
+    const rowH    = 7
 
-    pdf.setFillColor(30, 37, 53)
-    pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(7.5)
-    pdf.setTextColor(74, 81, 104)
-    let cx = mg + 3
-    cols7.forEach((col, i) => {
-      pdf.text(col.toUpperCase(), cx, y + 5)
-      cx += widths[i]
-    })
+    const _drawTableHeader = (yPos) => {
+      pdf.setFillColor(239, 246, 255)
+      pdf.rect(mg, yPos, pW - mg * 2, rowH, 'F')
+      pdf.setDrawColor(191, 219, 254)
+      pdf.setLineWidth(0.3)
+      pdf.line(mg, yPos + rowH, pW - mg, yPos + rowH)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(7)
+      pdf.setTextColor(30, 64, 175)
+      let hx = mg + 3
+      tCols.forEach((col, i) => { pdf.text(col.toUpperCase(), hx, yPos + 5); hx += tWidths[i] })
+    }
+
+    _drawTableHeader(y)
     y += rowH
 
-    // Linhas de dados
     const confMeta = {
-      em_ordem:       { label: 'Em ordem',       r: 34,  g: 201, b: 138 },
-      fora_de_ordem:  { label: 'Fora de ordem',  r: 240, g: 82,  b: 82  },
-      nao_encontrado: { label: 'Nao encontrado',  r: 79,  g: 142, b: 247 },
+      em_ordem:       { label: 'Em ordem',        r:16,  g:185, b:129, bg:[240,253,244] },
+      fora_de_ordem:  { label: 'Fora de ordem',   r:239, g:68,  b:68,  bg:[254,242,242] },
+      nao_encontrado: { label: 'Nao encontrado',   r:59,  g:130, b:246, bg:[239,246,255] },
     }
 
     results.forEach((row, idx) => {
-      // Nova página se necessário
-      if (y + rowH > pH - mg - 10) {
-        // Rodapé da página atual
+      if (y + rowH > pH - 14) {
         _pdfFooter(pdf, pW, pH)
         pdf.addPage()
+        pdf.setFillColor(255, 255, 255)
+        pdf.rect(0, 0, pW, pH, 'F')
         y = mg
-        // Repetir cabeçalho da tabela na nova página
-        pdf.setFillColor(30, 37, 53)
-        pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(7.5)
-        pdf.setTextColor(74, 81, 104)
-        let hx = mg + 3
-        cols7.forEach((col, i) => { pdf.text(col.toUpperCase(), hx, y + 5); hx += widths[i] })
+        _drawTableHeader(y)
         y += rowH
       }
 
-      // Fundo alternado
       const isEven = idx % 2 === 0
-      pdf.setFillColor(isEven ? 16 : 22, isEven ? 20 : 27, isEven ? 28 : 38)
+      pdf.setFillColor(isEven ? 255 : 248, isEven ? 255 : 250, isEven ? 255 : 255)
       pdf.rect(mg, y, pW - mg * 2, rowH, 'F')
+
+      // Linha divisória
+      pdf.setDrawColor(226, 232, 240)
+      pdf.setLineWidth(0.2)
+      pdf.line(mg, y + rowH, pW - mg, y + rowH)
 
       const meta = confMeta[row.conformidade] || confMeta['nao_encontrado']
       const diff = row.conformidade === 'fora_de_ordem'
         ? (row.diff > 0 ? `+${row.diff}` : String(row.diff))
         : '—'
 
+      const diffColor = row.conformidade === 'fora_de_ordem'
+        ? (row.diff > 0 ? [239, 68, 68] : [245, 158, 11])
+        : [148, 163, 184]
+
       const cells = [
-        { text: `${row.plan_seq}`,                color: [139, 146, 165], bold: false },
-        { text: row.real_seq != null ? `${row.real_seq}` : '—', color: [139, 146, 165], bold: false },
-        { text: row.code,                          color: [240, 242, 247], bold: true  },
-        { text: row.time || '—',                   color: [139, 146, 165], bold: false },
-        { text: row.cep || '—',                    color: [74,  81, 104],  bold: false },
-        { text: diff,
-          color: row.conformidade === 'fora_de_ordem'
-            ? (row.diff > 0 ? [240, 82, 82] : [245, 166, 35])
-            : [74, 81, 104],
-          bold: row.conformidade === 'fora_de_ordem' },
-        { text: meta.label, color: [meta.r, meta.g, meta.b], bold: true },
+        { text: String(row.plan_seq),                                   color: [100,116,139], bold: false },
+        { text: row.real_seq != null ? String(row.real_seq) : '—',     color: [100,116,139], bold: false },
+        { text: row.code,                                                color: [15, 23, 42],  bold: true  },
+        { text: row.time || '—',                                        color: [100,116,139], bold: false },
+        { text: row.cep  || '—',                                        color: [148,163,184], bold: false },
+        { text: diff,                                                    color: diffColor,     bold: row.conformidade === 'fora_de_ordem' },
+        { text: meta.label,                                              color: [meta.r, meta.g, meta.b], bold: true },
       ]
 
       let px = mg + 3
@@ -596,21 +640,21 @@ function generatePdf(s, results) {
         pdf.setFont('helvetica', cell.bold ? 'bold' : 'normal')
         pdf.setFontSize(7.5)
         pdf.setTextColor(...cell.color)
-        // Truncar texto longo para caber na coluna
-        const maxW = widths[i] - 4
-        let txt = cell.text
+        const maxW = tWidths[i] - 4
+        let txt = String(cell.text)
         while (txt.length > 3 && pdf.getTextWidth(txt) > maxW) txt = txt.slice(0, -1)
-        if (txt !== cell.text) txt = txt.slice(0, -1) + '…'
+        if (txt !== String(cell.text)) txt = txt.slice(0, -1) + '…'
         pdf.text(txt, px, y + 5)
-        px += widths[i]
+        px += tWidths[i]
       })
 
-      // Linha divisória fina
-      pdf.setDrawColor(30, 37, 53)
-      pdf.setLineWidth(0.2)
-      pdf.line(mg, y + rowH, pW - mg, y + rowH)
       y += rowH
     })
+
+    // Borda final da tabela
+    pdf.setDrawColor(226, 232, 240)
+    pdf.setLineWidth(0.3)
+    pdf.line(mg, y, pW - mg, y)
 
     // ── Rodapé em todas as páginas ──────────────────────────
     const totalPages = pdf.internal.getNumberOfPages()
@@ -619,7 +663,6 @@ function generatePdf(s, results) {
       _pdfFooter(pdf, pW, pH, p, totalPages)
     }
 
-    // ── Salvar ──────────────────────────────────────────────
     const date = new Date().toISOString().slice(0, 10)
     pdf.save(`RouteCheck_${date}.pdf`)
 
@@ -631,14 +674,29 @@ function generatePdf(s, results) {
   }
 }
 
+function _sectionTitle(pdf, title, mg, y, pW) {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9.5)
+  pdf.setTextColor(30, 58, 120)
+  pdf.text(title, mg, y)
+  pdf.setDrawColor(226, 232, 240)
+  pdf.setLineWidth(0.4)
+  pdf.line(mg + pdf.getTextWidth(title) + 4, y - 1, pW - mg, y - 1)
+}
+
 function _pdfFooter(pdf, pW, pH, current, total) {
-  pdf.setFillColor(10, 12, 16)
-  pdf.rect(0, pH - 10, pW, 10, 'F')
+  // Linha separadora
+  pdf.setDrawColor(226, 232, 240)
+  pdf.setLineWidth(0.4)
+  pdf.line(14, pH - 12, pW - 14, pH - 12)
+
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(7.5)
-  pdf.setTextColor(74, 81, 104)
-  pdf.text('RouteCheck · DFS · Uso interno', 14, pH - 4)
+  pdf.setFontSize(7)
+  pdf.setTextColor(148, 163, 184)
+  pdf.text('RouteCheck · DFS · Uso interno · Documento confidencial', 14, pH - 7)
   if (current && total) {
-    pdf.text(`Página ${current} de ${total}`, pW - 14, pH - 4, { align: 'right' })
+    pdf.setFont('helvetica', 'bold')
+    pdf.setTextColor(100, 116, 139)
+    pdf.text(`${current} / ${total}`, pW - 14, pH - 7, { align: 'right' })
   }
 }
