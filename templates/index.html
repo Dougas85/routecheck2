@@ -14,6 +14,9 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- PDF libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <!-- App CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
@@ -28,10 +31,16 @@
     <span class="logo-name">Route<span>Check</span></span>
     <span class="logo-ver">v1.0</span>
   </div>
-  <button class="btn-reset hidden" id="btnReset">
-    <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.85"/></svg>
-    Nova análise
-  </button>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button class="btn-export-pdf hidden" id="btnExportPdf">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar PDF
+    </button>
+    <button class="btn-reset hidden" id="btnReset">
+      <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.85"/></svg>
+      Nova análise
+    </button>
+  </div>
 </header>
 
 <!-- ── Upload View ──────────────────────────────────────── -->
@@ -125,7 +134,7 @@ Horário: 11:34
 
     <div class="table-wrap">
       <div class="table-scroll">
-        <table>
+        <table id="detailTable">
           <thead>
             <tr>
               <th data-col="plan_seq">Seq. TMS<span class="sort-icon"> ↑</span></th>
