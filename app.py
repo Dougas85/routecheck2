@@ -35,32 +35,30 @@ def parse_kml(text):
         code_m   = re.search(r'<td>ID</td>\s*<td>([^<]+)</td>', pm)
         obj_id_m = re.search(r'<td>ObjectId</td>\s*<td>(\d+)</td>', pm)
         coord_m  = re.search(r'<coordinates>\s*([^<]+)\s*</coordinates>', pm)
-        name_m   = re.search(r'<n>([^<]+)</n>', pm)
+        # NOVO: pega o orderId do ExtendedData (mais confiável)
+        order_m  = re.search(r'<Data name="orderId">\s*<value>([^<]+)</value>', pm)
+        # NOVO: <name> é a tag padrão do KML (a antiga <n> não existe mais)
+        name_m   = re.search(r'<name>([^<]+)</name>', pm)
 
         code   = (code_m.group(1).strip() if code_m
-                  else (name_m.group(1).strip() if name_m else f'#{i}'))
+                  else order_m.group(1).strip() if order_m
+                  else name_m.group(1).strip() if name_m
+                  else f'#{i}')
         obj_id = int(obj_id_m.group(1)) if obj_id_m else i + 1
 
         if not coord_m:
             continue
 
-        # KML pode vir em dois formatos:
-        # Formato padrão (ponto como decimal):  -51.385348,-22.093647,0
-        # Formato BR (vírgula como decimal):    -51,38534832,-22,09364667,0
-        # No formato BR o split por vírgula gera 4+ partes; no padrão gera 3.
         raw   = coord_m.group(1).strip().split()[0]
         parts = raw.split(',')
 
         try:
             if len(parts) >= 4:
-                # Formato BR: lon_inteiro,lon_decimal,lat_inteiro,lat_decimal[,alt]
                 lon = float(f"{parts[0]}.{parts[1]}")
                 lat = float(f"{parts[2]}.{parts[3]}")
             elif len(parts) == 3:
-                # Formato padrão KML: lon,lat,alt
                 lon, lat = float(parts[0]), float(parts[1])
             elif len(parts) == 2:
-                # Sem altitude
                 lon, lat = float(parts[0]), float(parts[1])
             else:
                 continue
